@@ -51,8 +51,8 @@ public class FunWalletController {
     @PostMapping("/auth/forgot-password")
     public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> payload) {
         try {
-            funWalletService.forgotPassword(payload.get("email"));
-            return ResponseEntity.ok("Password sent successfully");
+            String tempPass = funWalletService.forgotPassword(payload.get("email"));
+            return ResponseEntity.ok(Map.of("temporaryPassword", tempPass));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }

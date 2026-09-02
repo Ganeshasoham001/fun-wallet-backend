@@ -94,7 +94,7 @@ public class FunWalletService {
         return userRepository.save(user);
     }
 
-    public void forgotPassword(String email) {
+    public String forgotPassword(String email) {
         AppUser user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("No account found with that email"));
         
@@ -103,10 +103,7 @@ public class FunWalletService {
         user.setPassword(newPassword);
         userRepository.save(user);
         
-        // Send email
-        String subject = "Couple's Fun Wallet - Password Reset";
-        String body = "Hello " + user.getName() + ",\n\nYour new temporary password is: " + newPassword + "\n\nPlease login and keep it safe!";
-        emailService.sendSimpleMessage(email, subject, body);
+        return newPassword;
     }
 
     public AppUser deductPoints(String adminName, String userName) {
