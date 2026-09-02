@@ -50,6 +50,16 @@ public class FunWalletService {
         return appConfigRepository.save(newConfig);
     }
 
+    public boolean changePassword(String email, String oldPassword, String newPassword) {
+        AppUser user = login(email, oldPassword);
+        if (user != null) {
+            user.setPassword(newPassword);
+            userRepository.save(user);
+            return true;
+        }
+        return false;
+    }
+
     public AppUser getUser(String name) {
         return userRepository.findByName(name).orElseGet(() -> {
             AppUser newUser = new AppUser();

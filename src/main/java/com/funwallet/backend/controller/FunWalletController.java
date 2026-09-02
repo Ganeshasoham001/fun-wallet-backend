@@ -7,6 +7,8 @@ import com.funwallet.backend.service.FunWalletService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import java.util.List;
 import java.util.Map;
 
@@ -34,6 +36,16 @@ public class FunWalletController {
             payload.get("email"),
             payload.get("password")
         );
+    }
+
+    @PostMapping("/auth/change-password")
+    public ResponseEntity<?> changePassword(@RequestBody Map<String, String> request) {
+        try {
+            funWalletService.changePassword(request.get("email"), request.get("oldPassword"), request.get("newPassword"));
+            return ResponseEntity.ok("Password changed successfully");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     @PostMapping("/auth/forgot-password")
