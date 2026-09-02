@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: fun-wallet-backend
+    env: docker
+    plan: free
+    healthCheckPath: /api/users
