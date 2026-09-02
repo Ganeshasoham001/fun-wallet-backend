@@ -49,8 +49,13 @@ public class FunWalletController {
     }
 
     @PostMapping("/auth/forgot-password")
-    public void forgotPassword(@RequestBody Map<String, String> payload) {
-        funWalletService.forgotPassword(payload.get("email"));
+    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> payload) {
+        try {
+            funWalletService.forgotPassword(payload.get("email"));
+            return ResponseEntity.ok("Password sent successfully");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     // --- User Endpoints ---
