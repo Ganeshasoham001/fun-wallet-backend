@@ -162,4 +162,31 @@ public class FunWalletController {
     public java.util.List<com.funwallet.backend.model.PointHistory> getHistory(@PathVariable String username) {
         return funWalletService.getHistory(username);
     }
+
+    // --- Wishlist Endpoints ---
+    @GetMapping("/wishlist")
+    public List<com.funwallet.backend.model.WishlistItem> getAllWishlists() {
+        return funWalletService.getAllWishlists();
+    }
+
+    @PostMapping("/wishlist")
+    public com.funwallet.backend.model.WishlistItem createWishlist(@RequestBody Map<String, String> payload) {
+        String description = payload.get("description");
+        int targetMonth = Integer.parseInt(payload.get("targetMonth"));
+        int targetYear = Integer.parseInt(payload.get("targetYear"));
+        String createdBy = payload.get("createdBy");
+        return funWalletService.createWishlist(description, targetMonth, targetYear, createdBy);
+    }
+
+    @PostMapping("/wishlist/{id}/mark-complete")
+    public com.funwallet.backend.model.WishlistItem markWishlistComplete(@PathVariable Long id, @RequestBody Map<String, String> payload) {
+        String completedBy = payload.get("completedBy");
+        String completedDate = payload.get("completedDate");
+        return funWalletService.markWishlistComplete(id, completedBy, completedDate);
+    }
+
+    @PostMapping("/wishlist/{id}/approve")
+    public com.funwallet.backend.model.WishlistItem approveWishlistCompletion(@PathVariable Long id) {
+        return funWalletService.approveWishlistCompletion(id);
+    }
 }

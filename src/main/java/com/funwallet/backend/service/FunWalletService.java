@@ -30,6 +30,9 @@ public class FunWalletService {
     private com.funwallet.backend.repository.PointHistoryRepository pointHistoryRepository;
 
     @Autowired
+    private com.funwallet.backend.repository.WishlistRepository wishlistRepository;
+
+    @Autowired
     private EmailService emailService;
 
     private void logHistory(String username, int change, String reason) {
@@ -266,5 +269,35 @@ public class FunWalletService {
 
     public List<com.funwallet.backend.model.PointHistory> getHistory(String userName) {
         return pointHistoryRepository.findByUsernameOrderByTimestampDesc(userName);
+    }
+
+    public List<com.funwallet.backend.model.WishlistItem> getAllWishlists() {
+        return wishlistRepository.findAll();
+    }
+
+    public com.funwallet.backend.model.WishlistItem createWishlist(String description, int targetMonth, int targetYear, String createdBy) {
+        com.funwallet.backend.model.WishlistItem item = new com.funwallet.backend.model.WishlistItem();
+        item.setDescription(description);
+        item.setTargetMonth(targetMonth);
+        item.setTargetYear(targetYear);
+        item.setCreatedBy(createdBy);
+        item.setStatus("PENDING");
+        return wishlistRepository.save(item);
+    }
+
+    public com.funwallet.backend.model.WishlistItem markWishlistComplete(Long id, String completedBy, String completedDate) {
+        com.funwallet.backend.model.WishlistItem item = wishlistRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Wishlist item not found"));
+        item.setStatus("PENDING_APPROVAL");
+        item.setCompletedBy(completedBy);
+        item.setCompletedDate(completedDate);
+        return wishlistRepository.save(item);
+    }
+
+    public com.funwallet.backend.model.WishlistItem approveWishlistCompletion(Long id) {
+        com.funwallet.backend.model.WishlistItem item = wishlistRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Wishlist item not found"));
+        item.setStatus("COMPLETED");
+        return wishlistRepository.save(item);
     }
 }
