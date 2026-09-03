@@ -22,20 +22,30 @@ public class FunWalletController {
 
     // --- Auth Endpoints ---
     @PostMapping("/auth/register")
-    public AppUser register(@RequestBody Map<String, String> payload) {
-        return funWalletService.register(
-            payload.get("name"),
-            payload.get("email"),
-            payload.get("password")
-        );
+    public ResponseEntity<?> register(@RequestBody Map<String, String> payload) {
+        try {
+            AppUser user = funWalletService.register(
+                payload.get("name"),
+                payload.get("email"),
+                payload.get("password")
+            );
+            return ResponseEntity.ok(user);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     @PostMapping("/auth/login")
-    public AppUser login(@RequestBody Map<String, String> payload) {
-        return funWalletService.login(
-            payload.get("email"),
-            payload.get("password")
-        );
+    public ResponseEntity<?> login(@RequestBody Map<String, String> payload) {
+        try {
+            AppUser user = funWalletService.login(
+                payload.get("email"),
+                payload.get("password")
+            );
+            return ResponseEntity.ok(user);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     @PostMapping("/auth/change-password")
