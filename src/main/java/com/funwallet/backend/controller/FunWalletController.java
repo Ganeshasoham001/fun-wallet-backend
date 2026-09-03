@@ -185,8 +185,24 @@ public class FunWalletController {
             @RequestParam(required = false) String completedDate,
             @RequestParam(required = false) String completedBy,
             @RequestBody(required = false) Map<String, String> payload) {
-        String by = (payload != null && payload.get("completedBy") != null) ? payload.get("completedBy") : (completedBy != null ? completedBy : "USER");
-        String d = (payload != null && payload.get("completedDate") != null) ? payload.get("completedDate") : (completedDate != null ? completedDate : (date != null ? date : ""));
+        String by = null;
+        if (payload != null && payload.get("completedBy") != null && !payload.get("completedBy").trim().isEmpty()) {
+            by = payload.get("completedBy").trim();
+        } else if (completedBy != null && !completedBy.trim().isEmpty()) {
+            by = completedBy.trim();
+        }
+        if (by == null) by = "USER";
+
+        String d = null;
+        if (payload != null && payload.get("completedDate") != null && !payload.get("completedDate").trim().isEmpty()) {
+            d = payload.get("completedDate").trim();
+        } else if (completedDate != null && !completedDate.trim().isEmpty()) {
+            d = completedDate.trim();
+        } else if (date != null && !date.trim().isEmpty()) {
+            d = date.trim();
+        }
+        if (d == null) d = "";
+
         return funWalletService.markWishlistComplete(id, by, d);
     }
 
