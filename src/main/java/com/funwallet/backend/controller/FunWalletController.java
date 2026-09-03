@@ -178,11 +178,16 @@ public class FunWalletController {
         return funWalletService.createWishlist(description, targetMonth, targetYear, createdBy);
     }
 
-    @PostMapping("/wishlist/{id}/mark-complete")
-    public com.funwallet.backend.model.WishlistItem markWishlistComplete(@PathVariable Long id, @RequestBody Map<String, String> payload) {
-        String completedBy = payload.get("completedBy");
-        String completedDate = payload.get("completedDate");
-        return funWalletService.markWishlistComplete(id, completedBy, completedDate);
+    @PostMapping({"/wishlist/{id}/mark-complete", "/wishlist/{id}/complete"})
+    public com.funwallet.backend.model.WishlistItem markWishlistComplete(
+            @PathVariable Long id,
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false) String completedDate,
+            @RequestParam(required = false) String completedBy,
+            @RequestBody(required = false) Map<String, String> payload) {
+        String by = (payload != null && payload.get("completedBy") != null) ? payload.get("completedBy") : (completedBy != null ? completedBy : "USER");
+        String d = (payload != null && payload.get("completedDate") != null) ? payload.get("completedDate") : (completedDate != null ? completedDate : (date != null ? date : ""));
+        return funWalletService.markWishlistComplete(id, by, d);
     }
 
     @PostMapping("/wishlist/{id}/approve")
