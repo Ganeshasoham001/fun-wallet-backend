@@ -61,12 +61,37 @@ public class FunWalletService {
     }
 
     public AppUser getUser(String name) {
-        return userRepository.findByName(name).orElseGet(() -> {
+        AppUser user = userRepository.findByName(name).orElseGet(() -> {
             AppUser newUser = new AppUser();
             newUser.setName(name);
             newUser.setRole("Soham".equalsIgnoreCase(name) ? "ADMIN" : "USER");
             return userRepository.save(newUser);
         });
+        return checkMoodExpiration(user);
+    }
+
+    public List<AppUser> getAllUsers() {
+        List<AppUser> users = userRepository.findAll();
+        users.forEach(this::checkMoodExpiration);
+        return users;
+    }
+    
+    private AppUser checkMoodExpiration(AppUser user) {
+        if (user.getMoodUpdatedAt() != null && 
+            user.getMoodUpdatedAt().isBefore(java.time.LocalDateTime.now().minusHours(24))) {
+            user.setMoodText(null);
+            user.setMoodUpdatedAt(null);
+            userRepository.save(user);
+        }
+        return user;
+    }
+    
+    public AppUser updateMood(String username, String moodText) {
+        AppUser user = userRepository.findByName(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setMoodText(moodText);
+        user.setMoodUpdatedAt(java.time.LocalDateTime.now());
+        return userRepository.save(user);
     }
 
     public AppUser login(String email, String password) {

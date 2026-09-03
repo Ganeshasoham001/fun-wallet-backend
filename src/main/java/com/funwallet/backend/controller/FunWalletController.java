@@ -69,9 +69,24 @@ public class FunWalletController {
     }
 
     // --- User Endpoints ---
+    @GetMapping("/users")
+    public List<AppUser> getAllUsers() {
+        return funWalletService.getAllUsers();
+    }
+
     @GetMapping("/user/{name}")
     public AppUser getUser(@PathVariable String name) {
         return funWalletService.getUser(name);
+    }
+    
+    @PostMapping("/user/mood")
+    public ResponseEntity<?> updateMood(@RequestBody Map<String, String> payload) {
+        try {
+            AppUser user = funWalletService.updateMood(payload.get("username"), payload.get("moodText"));
+            return ResponseEntity.ok(user);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     // --- Config Endpoints ---
