@@ -210,4 +210,14 @@ public class FunWalletController {
     public com.funwallet.backend.model.WishlistItem approveWishlistCompletion(@PathVariable Long id) {
         return funWalletService.approveWishlistCompletion(id);
     }
+
+    @RequestMapping(value = {"/wishlist/{id}", "/wishlist/{id}/update"}, method = {org.springframework.web.bind.annotation.RequestMethod.PUT, org.springframework.web.bind.annotation.RequestMethod.POST})
+    public com.funwallet.backend.model.WishlistItem updateWishlist(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> payload) {
+        String description = payload.get("description");
+        int targetMonth = Integer.parseInt(payload.get("targetMonth"));
+        int targetYear = Integer.parseInt(payload.get("targetYear"));
+        return funWalletService.updateWishlist(id, description, targetMonth, targetYear);
+    }
 }

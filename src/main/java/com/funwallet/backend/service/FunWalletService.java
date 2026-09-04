@@ -300,4 +300,16 @@ public class FunWalletService {
         item.setStatus("COMPLETED");
         return wishlistRepository.save(item);
     }
+
+    public com.funwallet.backend.model.WishlistItem updateWishlist(Long id, String description, int targetMonth, int targetYear) {
+        com.funwallet.backend.model.WishlistItem item = wishlistRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Wishlist item not found"));
+        if (!"PENDING".equalsIgnoreCase(item.getStatus()) && !"INCOMPLETE".equalsIgnoreCase(item.getStatus())) {
+            throw new RuntimeException("Only incomplete wishlist items can be edited");
+        }
+        item.setDescription(description);
+        item.setTargetMonth(targetMonth);
+        item.setTargetYear(targetYear);
+        return wishlistRepository.save(item);
+    }
 }
