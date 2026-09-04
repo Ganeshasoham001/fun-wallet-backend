@@ -24,42 +24,38 @@ public class EmailService {
     private String getBrevoKey() {
         String envKey = System.getenv("BREVO_API_KEY");
         if (envKey != null && !envKey.trim().isEmpty()) return envKey.trim();
-        
-        StringBuilder sb = new StringBuilder();
-        sb.append("xkeysib-");
-        sb.append("f8753239276d4dfb");
-        sb.append("cbe8e4fbceef15fa");
-        sb.append("40aeed1f1aa9338f");
-        sb.append("0d55e8c1b33cf23a");
-        sb.append("-fG6MND7D91aI530C");
-        return sb.toString();
+        return "";
     }
 
     public void sendSimpleMessage(String to, String subject, String text) {
-        // 1. Try Brevo HTTPS API (Port 443 HTTPS - Never blocked by Render cloud firewall)
-        try {
-            String brevoApiKey = getBrevoKey();
-            String url = "https://api.brevo.com/v3/smtp/email";
+        logger.info("Dispatching password reset email to {}. Message:\n{}", to, text);
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("api-key", brevoApiKey);
+        // 1. Try Brevo HTTPS API if BREVO_API_KEY environment variable is configured
+        String brevoApiKey = getBrevoKey();
+        if (!brevoApiKey.isEmpty()) {
+            try {
+                String url = "https://api.brevo.com/v3/smtp/email";
 
-            Map<String, Object> body = new HashMap<>();
-            body.put("sender", Map.of("name", "Couple's Fun Wallet", "email", "connectly2001@gmail.com"));
-            body.put("to", List.of(Map.of("email", to)));
-            body.put("subject", subject);
-            body.put("textContent", text);
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                headers.set("api-key", brevoApiKey);
 
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-            ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
+                Map<String, Object> body = new HashMap<>();
+                body.put("sender", Map.of("name", "Couple's Fun Wallet", "email", "connectly2001@gmail.com"));
+                body.put("to", List.of(Map.of("email", to)));
+                body.put("subject", subject);
+                body.put("textContent", text);
 
-            if (response.getStatusCode().is2xxSuccessful()) {
-                logger.info("Email sent successfully via Brevo HTTPS API to {}", to);
-                return;
+                HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+                ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
+
+                if (response.getStatusCode().is2xxSuccessful()) {
+                    logger.info("Email sent successfully via Brevo HTTPS API to {}", to);
+                    return;
+                }
+            } catch (Exception e) {
+                logger.warn("Brevo HTTPS API email dispatch failed: {}", e.getMessage());
             }
-        } catch (Exception e) {
-            logger.warn("Brevo HTTPS API email dispatch failed: {}. Falling back to SMTP...", e.getMessage());
         }
 
         // 2. Fallback to JavaMailSender SMTP
@@ -73,8 +69,9 @@ public class EmailService {
                 mailSender.send(message);
                 logger.info("Email sent via JavaMailSender fallback to {}", to);
             } catch (Exception ex) {
-                logger.error("JavaMailSender fallback failed: {}", ex.getMessage());
+                logger.warn("JavaMailSender SMTP dispatch failed (cloud port block): {}", ex.getMessage());
             }
         }
     }
 }
+
