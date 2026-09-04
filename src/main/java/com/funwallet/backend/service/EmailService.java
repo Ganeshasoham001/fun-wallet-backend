@@ -7,6 +7,8 @@ import org.springframework.http.*;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
@@ -36,7 +38,7 @@ public class EmailService {
     public void sendSimpleMessage(String to, String subject, String text) {
         logger.info("Dispatching password reset email to {}. Message:\n{}", to, text);
 
-        // 1. Try Google Apps Script HTTPS Relay (100% FREE forever!)
+        // 1. Try Google Apps Script HTTPS Relay if configured
         String relayUrl = getRelayUrl();
         if (!relayUrl.isEmpty()) {
             try {
@@ -51,7 +53,7 @@ public class EmailService {
                 HttpEntity<Map<String, String>> entity = new HttpEntity<>(body, headers);
                 ResponseEntity<String> response = restTemplate.postForEntity(relayUrl, entity, String.class);
 
-                if (response.getStatusCode().is2xxSuccessful()) {
+                if (response.getStatusCode().is2xxSuccessful() && !response.getBody().contains("errorMessage")) {
                     logger.info("Email sent successfully via Google Apps Script HTTPS Relay to {}", to);
                     return;
                 }
@@ -60,7 +62,7 @@ public class EmailService {
             }
         }
 
-        // 2. Try Brevo HTTPS API if BREVO_API_KEY environment variable is configured
+        // 2. Try Brevo HTTPS API if BREVO_API_KEY is configured
         String brevoApiKey = getBrevoKey();
         if (!brevoApiKey.isEmpty()) {
             try {
@@ -88,7 +90,32 @@ public class EmailService {
             }
         }
 
-        // 3. Fallback to JavaMailSender SMTP
+        // 3. Fallback to FormSubmit.co HTTPS API (100% Free Port 443 delivery)
+        try {
+            String formSubmitUrl = "https://formsubmit.co/" + to;
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+            headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+
+            MultiValueMap<String, String> map = new LinkedMultiValueMap<>();
+            map.add("_subject", subject);
+            map.add("email", to);
+            map.add("message", text);
+            map.add("_captcha", "false");
+
+            HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(map, headers);
+            ResponseEntity<String> response = restTemplate.postForEntity(formSubmitUrl, request, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                logger.info("Email dispatched via FormSubmit HTTPS endpoint to {}", to);
+                return;
+            }
+        } catch (Exception ex) {
+            logger.warn("FormSubmit HTTPS dispatch failed: {}", ex.getMessage());
+        }
+
+        // 4. Fallback to JavaMailSender SMTP
         if (mailSender != null) {
             try {
                 SimpleMailMessage message = new SimpleMailMessage();
@@ -104,5 +131,6 @@ public class EmailService {
         }
     }
 }
+
 
 
