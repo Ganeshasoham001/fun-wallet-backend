@@ -127,9 +127,21 @@ public class FunWalletService {
                 .orElseThrow(() -> new RuntimeException("No account found with that email"));
         
         // Generate random password
-        String newPassword = "fun" + (int)(Math.random() * 10000);
+        String newPassword = "fun" + (int)(1000 + Math.random() * 9000);
         user.setPassword(newPassword);
         userRepository.save(user);
+
+        // Send Email via Gmail SMTP
+        try {
+            String subject = "🔑 Your Couple's Fun Wallet Temporary Password";
+            String text = "Hello " + user.getName() + ",\n\n" +
+                    "Your temporary password has been reset to: " + newPassword + "\n\n" +
+                    "Please log in and update your password in settings.\n\n" +
+                    "With love,\nCouple's Fun Wallet ❤️";
+            emailService.sendSimpleMessage(user.getEmail(), subject, text);
+        } catch (Exception e) {
+            System.err.println("Failed to send reset email: " + e.getMessage());
+        }
         
         return newPassword;
     }
