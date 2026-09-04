@@ -21,6 +21,12 @@ public class EmailService {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
+    private String getRelayUrl() {
+        String envUrl = System.getenv("GMAIL_RELAY_URL");
+        if (envUrl != null && !envUrl.trim().isEmpty()) return envUrl.trim();
+        return "";
+    }
+
     private String getBrevoKey() {
         String envKey = System.getenv("BREVO_API_KEY");
         if (envKey != null && !envKey.trim().isEmpty()) return envKey.trim();
@@ -30,7 +36,31 @@ public class EmailService {
     public void sendSimpleMessage(String to, String subject, String text) {
         logger.info("Dispatching password reset email to {}. Message:\n{}", to, text);
 
-        // 1. Try Brevo HTTPS API if BREVO_API_KEY environment variable is configured
+        // 1. Try Google Apps Script HTTPS Relay (100% FREE forever!)
+        String relayUrl = getRelayUrl();
+        if (!relayUrl.isEmpty()) {
+            try {
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+
+                Map<String, String> body = new HashMap<>();
+                body.put("to", to);
+                body.put("subject", subject);
+                body.put("text", text);
+
+                HttpEntity<Map<String, String>> entity = new HttpEntity<>(body, headers);
+                ResponseEntity<String> response = restTemplate.postForEntity(relayUrl, entity, String.class);
+
+                if (response.getStatusCode().is2xxSuccessful()) {
+                    logger.info("Email sent successfully via Google Apps Script HTTPS Relay to {}", to);
+                    return;
+                }
+            } catch (Exception e) {
+                logger.warn("Google Apps Script HTTPS Relay failed: {}", e.getMessage());
+            }
+        }
+
+        // 2. Try Brevo HTTPS API if BREVO_API_KEY environment variable is configured
         String brevoApiKey = getBrevoKey();
         if (!brevoApiKey.isEmpty()) {
             try {
@@ -58,7 +88,7 @@ public class EmailService {
             }
         }
 
-        // 2. Fallback to JavaMailSender SMTP
+        // 3. Fallback to JavaMailSender SMTP
         if (mailSender != null) {
             try {
                 SimpleMailMessage message = new SimpleMailMessage();
@@ -74,4 +104,5 @@ public class EmailService {
         }
     }
 }
+
 
