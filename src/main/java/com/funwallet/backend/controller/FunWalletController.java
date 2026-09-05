@@ -5,12 +5,15 @@ import com.funwallet.backend.model.PointsRequest;
 import com.funwallet.backend.model.Streak;
 import com.funwallet.backend.service.FunWalletService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-
-import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 @RestController
 @RequestMapping("/api")
@@ -19,6 +22,36 @@ public class FunWalletController {
 
     @Autowired
     private FunWalletService funWalletService;
+
+    private static final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
+
+    @GetMapping(value = "/events/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter subscribe() {
+        SseEmitter emitter = new SseEmitter(0L); // Infinite timeout for real-time events
+        emitters.add(emitter);
+
+        emitter.onCompletion(() -> emitters.remove(emitter));
+        emitter.onTimeout(() -> emitters.remove(emitter));
+        emitter.onError((e) -> emitters.remove(emitter));
+
+        try {
+            emitter.send(SseEmitter.event().name("connected").data("connected"));
+        } catch (Exception e) {
+            emitters.remove(emitter);
+        }
+
+        return emitter;
+    }
+
+    public static void notifyEvent(String eventType) {
+        for (SseEmitter emitter : emitters) {
+            try {
+                emitter.send(SseEmitter.event().name("update").data(eventType));
+            } catch (Exception e) {
+                emitters.remove(emitter);
+            }
+        }
+    }
 
     // --- Auth Endpoints ---
     @PostMapping("/auth/register")
@@ -83,6 +116,7 @@ public class FunWalletController {
     public ResponseEntity<?> updateMood(@RequestBody Map<String, String> payload) {
         try {
             AppUser user = funWalletService.updateMood(payload.get("username"), payload.get("moodText"));
+            notifyEvent("MOOD_UPDATED");
             return ResponseEntity.ok(user);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -97,7 +131,9 @@ public class FunWalletController {
 
     @PostMapping("/admin/config")
     public com.funwallet.backend.model.AppConfig updateConfig(@RequestBody com.funwallet.backend.model.AppConfig config) {
-        return funWalletService.updateConfig(config);
+        com.funwallet.backend.model.AppConfig updated = funWalletService.updateConfig(config);
+        notifyEvent("CONFIG_UPDATED");
+        return updated;
     }
 
     // --- Wallet Endpoints ---
@@ -105,7 +141,9 @@ public class FunWalletController {
     public AppUser angryForOneDay(@RequestBody Map<String, String> payload) {
         String adminName = payload.get("adminName");
         String targetName = payload.get("targetName"); // usually Sairindhri
-        return funWalletService.deductPoints(adminName, targetName);
+        AppUser user = funWalletService.deductPoints(adminName, targetName);
+        notifyEvent("POINTS_DEDUCTED");
+        return user;
     }
 
     // --- Streak Endpoints ---
@@ -118,7 +156,9 @@ public class FunWalletController {
     public AppUser addProgress(@RequestBody Map<String, String> payload) {
         String userName = payload.get("userName");
         String type = payload.get("type"); // study or behaviour
-        return funWalletService.addProgress(userName, type);
+        AppUser user = funWalletService.addProgress(userName, type);
+        notifyEvent("PROGRESS_ADDED");
+        return user;
     }
 
     @PostMapping("/admin/streak/reset")
@@ -127,6 +167,7 @@ public class FunWalletController {
         String targetName = payload.get("targetName");
         String type = payload.get("type");
         funWalletService.resetStreak(adminName, targetName, type);
+        notifyEvent("STREAK_RESET");
     }
 
     // --- Request Endpoints ---
@@ -135,7 +176,9 @@ public class FunWalletController {
         String userName = payload.get("userName");
         String category = payload.get("category");
         int points = Integer.parseInt(payload.get("points"));
-        return funWalletService.createRequest(userName, category, points);
+        PointsRequest req = funWalletService.createRequest(userName, category, points);
+        notifyEvent("REQUEST_CREATED");
+        return req;
     }
 
     @GetMapping("/admin/requests/pending")
@@ -148,14 +191,18 @@ public class FunWalletController {
         String adminName = payload.get("adminName");
         Long requestId = Long.parseLong(payload.get("requestId"));
         int grantedPoints = Integer.parseInt(payload.getOrDefault("grantedPoints", "10"));
-        return funWalletService.approveRequest(adminName, requestId, grantedPoints);
+        PointsRequest req = funWalletService.approveRequest(adminName, requestId, grantedPoints);
+        notifyEvent("REQUEST_APPROVED");
+        return req;
     }
 
     @PostMapping("/admin/request/reject")
     public PointsRequest rejectRequest(@RequestBody Map<String, String> payload) {
         String adminName = payload.get("adminName");
         Long requestId = Long.parseLong(payload.get("requestId"));
-        return funWalletService.rejectRequest(adminName, requestId);
+        PointsRequest req = funWalletService.rejectRequest(adminName, requestId);
+        notifyEvent("REQUEST_REJECTED");
+        return req;
     }
 
     @GetMapping("/history/{username}")
@@ -175,7 +222,9 @@ public class FunWalletController {
         int targetMonth = Integer.parseInt(payload.get("targetMonth"));
         int targetYear = Integer.parseInt(payload.get("targetYear"));
         String createdBy = payload.get("createdBy");
-        return funWalletService.createWishlist(description, targetMonth, targetYear, createdBy);
+        com.funwallet.backend.model.WishlistItem item = funWalletService.createWishlist(description, targetMonth, targetYear, createdBy);
+        notifyEvent("WISHLIST_CREATED");
+        return item;
     }
 
     @PostMapping({"/wishlist/{id}/mark-complete", "/wishlist/{id}/complete"})
@@ -203,12 +252,16 @@ public class FunWalletController {
         }
         if (d == null) d = "";
 
-        return funWalletService.markWishlistComplete(id, by, d);
+        com.funwallet.backend.model.WishlistItem item = funWalletService.markWishlistComplete(id, by, d);
+        notifyEvent("WISHLIST_COMPLETED");
+        return item;
     }
 
     @PostMapping("/wishlist/{id}/approve")
     public com.funwallet.backend.model.WishlistItem approveWishlistCompletion(@PathVariable Long id) {
-        return funWalletService.approveWishlistCompletion(id);
+        com.funwallet.backend.model.WishlistItem item = funWalletService.approveWishlistCompletion(id);
+        notifyEvent("WISHLIST_APPROVED");
+        return item;
     }
 
     @RequestMapping(value = {"/wishlist/{id}", "/wishlist/{id}/update"}, method = {org.springframework.web.bind.annotation.RequestMethod.PUT, org.springframework.web.bind.annotation.RequestMethod.POST})
@@ -218,6 +271,9 @@ public class FunWalletController {
         String description = payload.get("description");
         int targetMonth = Integer.parseInt(payload.get("targetMonth"));
         int targetYear = Integer.parseInt(payload.get("targetYear"));
-        return funWalletService.updateWishlist(id, description, targetMonth, targetYear);
+        com.funwallet.backend.model.WishlistItem item = funWalletService.updateWishlist(id, description, targetMonth, targetYear);
+        notifyEvent("WISHLIST_UPDATED");
+        return item;
     }
 }
+
