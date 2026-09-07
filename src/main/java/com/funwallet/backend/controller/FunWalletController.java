@@ -2,7 +2,10 @@ package com.funwallet.backend.controller;
 
 import com.funwallet.backend.model.AppUser;
 import com.funwallet.backend.model.PointsRequest;
+import com.funwallet.backend.model.ScheduledReminder;
 import com.funwallet.backend.model.Streak;
+import com.funwallet.backend.repository.ScheduledReminderRepository;
+import com.funwallet.backend.service.EmailService;
 import com.funwallet.backend.service.FunWalletService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -11,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -22,6 +26,12 @@ public class FunWalletController {
 
     @Autowired
     private FunWalletService funWalletService;
+
+    @Autowired
+    private ScheduledReminderRepository reminderRepository;
+
+    @Autowired
+    private EmailService emailService;
 
     private static final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
 
@@ -274,6 +284,96 @@ public class FunWalletController {
         com.funwallet.backend.model.WishlistItem item = funWalletService.updateWishlist(id, description, targetMonth, targetYear);
         notifyEvent("WISHLIST_UPDATED");
         return item;
+    }
+
+    // --- Scheduled Reminder Endpoints ---
+    @GetMapping("/reminders")
+    public List<ScheduledReminder> getReminders(@RequestParam(required = false) String user) {
+        if (user != null && !user.trim().isEmpty()) {
+            return reminderRepository.findByCreatedByOrderByScheduledTimeDesc(user.trim());
+        }
+        return reminderRepository.findAllByOrderByScheduledTimeDesc();
+    }
+
+    @PostMapping("/reminders")
+    public ResponseEntity<?> createReminder(@RequestBody Map<String, String> payload) {
+        try {
+            String createdBy = payload.get("createdBy");
+            String recipientEmail = payload.get("recipientEmail");
+            String subject = payload.get("subject");
+            String message = payload.get("message");
+            String scheduledTimeStr = payload.get("scheduledTime");
+
+            if (recipientEmail == null || recipientEmail.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("Recipient email is required");
+            }
+            if (message == null || message.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("Message content is required");
+            }
+            if (scheduledTimeStr == null || scheduledTimeStr.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("Scheduled date and time is required");
+            }
+
+            Instant scheduledTime = Instant.parse(scheduledTimeStr.trim());
+
+            ScheduledReminder reminder = new ScheduledReminder();
+            reminder.setCreatedBy(createdBy != null ? createdBy.trim() : "Anonymous");
+            reminder.setRecipientEmail(recipientEmail.trim());
+            reminder.setSubject(subject != null && !subject.trim().isEmpty() ? subject.trim() : "Couple's Fun Wallet Reminder ⏰💖");
+            reminder.setMessage(message.trim());
+            reminder.setScheduledTime(scheduledTime);
+            reminder.setSent(false);
+            reminder.setCreatedAt(Instant.now());
+
+            ScheduledReminder saved = reminderRepository.save(reminder);
+            notifyEvent("REMINDER_CREATED");
+            return ResponseEntity.ok(saved);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Failed to schedule reminder: " + e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/reminders/{id}")
+    public ResponseEntity<?> deleteReminder(@PathVariable Long id) {
+        try {
+            if (reminderRepository.existsById(id)) {
+                reminderRepository.deleteById(id);
+                notifyEvent("REMINDER_DELETED");
+                return ResponseEntity.ok(Map.of("message", "Reminder deleted successfully"));
+            }
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Failed to delete reminder: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/reminders/{id}/send-now")
+    public ResponseEntity<?> sendReminderNow(@PathVariable Long id) {
+        try {
+            ScheduledReminder reminder = reminderRepository.findById(id).orElse(null);
+            if (reminder == null) {
+                return ResponseEntity.notFound().build();
+            }
+            String emailSubject = (reminder.getSubject() != null && !reminder.getSubject().trim().isEmpty())
+                    ? reminder.getSubject().trim()
+                    : "Couple's Fun Wallet Reminder ⏰💖";
+
+            String creatorInfo = (reminder.getCreatedBy() != null && !reminder.getCreatedBy().trim().isEmpty())
+                    ? reminder.getCreatedBy().trim()
+                    : "Someone special";
+
+            String emailBody = reminder.getMessage() + "\n\n---\nSent with ❤️ from " + creatorInfo + " via Couple's Fun Wallet";
+
+            emailService.sendSimpleMessage(reminder.getRecipientEmail(), emailSubject, emailBody);
+
+            reminder.setSent(true);
+            reminder.setSentAt(Instant.now());
+            reminderRepository.save(reminder);
+            notifyEvent("REMINDER_SENT");
+            return ResponseEntity.ok(reminder);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Failed to send reminder now: " + e.getMessage());
+        }
     }
 }
 
