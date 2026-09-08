@@ -596,19 +596,7 @@ public class FunWalletController {
     // --- Feature 5: Our Moments Polaroid Scrapbook ---
     @GetMapping("/moments")
     public List<PolaroidMoment> getAllMoments() {
-        List<PolaroidMoment> list = polaroidMomentRepository.findAllByOrderByMemoryDateDesc();
-        if (list.isEmpty()) {
-            // Seed a sweet initial moment
-            PolaroidMoment m1 = new PolaroidMoment();
-            m1.setTitle("First Sweet Memory 🍦");
-            m1.setCaption("The moment our journey began. Every step with you feels like a dream. ❤️");
-            m1.setMemoryDate(LocalDate.now().toString());
-            m1.setCreatedBy("Soham");
-            m1.setImageUrl("https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&w=800&q=80");
-            polaroidMomentRepository.save(m1);
-            list = List.of(m1);
-        }
-        return list;
+        return polaroidMomentRepository.findAllByOrderByMemoryDateDesc();
     }
 
     @PostMapping("/moments")
@@ -657,34 +645,21 @@ public class FunWalletController {
     // --- Feature 6: Open When Digital Love Envelopes ---
     @GetMapping("/envelopes")
     public List<LoveEnvelope> getAllEnvelopes(@RequestParam(required = false) String recipient) {
-        List<LoveEnvelope> list = loveEnvelopeRepository.findAllByOrderByCreatedAtDesc();
-        if (list.isEmpty()) {
-            // Pre-populate sweet default envelopes
-            List<LoveEnvelope> defaults = List.of(
-                createDefaultEnvelope("Open when you are having a tough day 🥺", "Hey my love, take a deep breath. You are stronger than any bad day, and I am always right beside you holding your hand. You've got this, and I love you so much! 🫂❤️", "Soham", "Sairindhri", "ANYTIME", null),
-                createDefaultEnvelope("Open when you miss my hugs 🫂", "Close your eyes right now. Imagine my arms wrapped tight around you, pulling you in close with a soft forehead kiss. Distance is just a number — you are right here in my heart. 💖", "Soham", "Sairindhri", "ANYTIME", null),
-                createDefaultEnvelope("Open when you are mad at me 😤", "I'm sorry if I was silly or didn't understand right away. I love you more than any silly disagreement. Give me one sweet smile and let's eat something yummy together? 🥺🍦", "Soham", "Sairindhri", "ANYTIME", null),
-                createDefaultEnvelope("Open when you can't fall asleep 😴", "Put your phone down after this. Think of our happiest laugh together. Let the warmth carry you into sweet dreams. I'll see you in dreamland tonight! 🌙✨", "Soham", "Sairindhri", "ANYTIME", null),
-                createDefaultEnvelope("Open on our next Anniversary 🥂", "Happy Anniversary to the most special person in my life! Loving you is the easiest, most beautiful thing I have ever done. Here's to forever and always! 🥂💍✨", "Soham", "Sairindhri", "ANYTIME", null),
-                createDefaultEnvelope("Open when you need a reminder of why I love you 💖", "I love your gentle heart, the way your eyes sparkle when you smile, how caring you are, and how you make every regular day feel like magic. You are my favorite person forever! 🌸🥰", "Soham", "Sairindhri", "ANYTIME", null)
-            );
-            loveEnvelopeRepository.saveAll(defaults);
-            list = defaults;
-        }
-        return list;
+        return loveEnvelopeRepository.findAllByOrderByCreatedAtDesc();
     }
 
-    private LoveEnvelope createDefaultEnvelope(String title, String content, String sender, String recipient, String unlockType, LocalDate unlockDate) {
-        LoveEnvelope env = new LoveEnvelope();
-        env.setTitle(title);
-        env.setContent(content);
-        env.setSender(sender);
-        env.setRecipient(recipient);
-        env.setUnlockType(unlockType);
-        env.setUnlockDate(unlockDate);
-        env.setOpened(false);
-        env.setCreatedAt(Instant.now());
-        return env;
+    @DeleteMapping("/envelopes/{id}")
+    public ResponseEntity<?> deleteEnvelope(@PathVariable Long id) {
+        try {
+            if (loveEnvelopeRepository.existsById(id)) {
+                loveEnvelopeRepository.deleteById(id);
+                notifyEvent("ENVELOPE_DELETED");
+                return ResponseEntity.ok(Map.of("message", "Envelope deleted"));
+            }
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Delete error: " + e.getMessage());
+        }
     }
 
     @PostMapping("/envelopes")
