@@ -12,6 +12,7 @@ import com.funwallet.backend.repository.DailyQuestionRepository;
 import com.funwallet.backend.repository.HeartbeatPokeRepository;
 import com.funwallet.backend.repository.PolaroidMomentRepository;
 import com.funwallet.backend.repository.LoveEnvelopeRepository;
+import com.funwallet.backend.repository.UserRepository;
 import com.funwallet.backend.repository.ScheduledReminderRepository;
 import com.funwallet.backend.service.EmailService;
 import com.funwallet.backend.service.FunWalletService;
@@ -55,6 +56,9 @@ public class FunWalletController {
 
     @Autowired
     private LoveEnvelopeRepository loveEnvelopeRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
     private static final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
 
@@ -423,9 +427,31 @@ public class FunWalletController {
         "What is a silly nickname or compliment that always works on you? 🤭"
     };
 
-    @GetMapping("/daily-question/today")
-    public ResponseEntity<?> getTodayQuestion(@RequestParam(required = false) String user) {
+    private boolean isSoham(String userIdentifier) {
+        if (userIdentifier == null || userIdentifier.trim().isEmpty()) return false;
+        String s = userIdentifier.trim().toLowerCase();
+        if (s.equals("soham") || s.contains("admin") || s.contains("chatterjeesoham6") || s.startsWith("soham@")) {
+            return true;
+        }
+        if (s.equals("sairindhri") || s.contains("sairindhri")) {
+            return false;
+        }
         try {
+            AppUser u = userRepository.findByEmail(userIdentifier.trim())
+                    .or(() -> userRepository.findByName(userIdentifier.trim()))
+                    .orElse(null);
+            if (u != null) {
+                return "ADMIN".equalsIgnoreCase(u.getRole()) || "Soham".equalsIgnoreCase(u.getName());
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    @GetMapping("/daily-question/today")
+    public ResponseEntity<?> getTodayQuestion(@RequestParam(required = false) String user,
+                                             @RequestParam(required = false) String userEmail) {
+        try {
+            String targetUser = (userEmail != null && !userEmail.trim().isEmpty()) ? userEmail.trim() : (user != null ? user.trim() : "");
             String todayStr = LocalDate.now().toString();
             DailyQuestion q = dailyQuestionRepository.findByQuestionDate(todayStr).orElseGet(() -> {
                 DailyQuestion newQ = new DailyQuestion();
@@ -447,19 +473,19 @@ public class FunWalletController {
             resp.put("sohamAnswered", sohamDone);
             resp.put("sairindhriAnswered", sairindhriDone);
 
-            String reqUser = user != null ? user.trim() : "";
-            if (reqUser.equalsIgnoreCase("Soham")) {
+            boolean isSohamUser = isSoham(targetUser);
+            if (isSohamUser) {
                 resp.put("myAnswer", q.getSohamAnswer());
                 resp.put("partnerAnswered", sairindhriDone);
                 resp.put("partnerAnswer", q.isRevealed() ? q.getSairindhriAnswer() : null);
-            } else if (reqUser.equalsIgnoreCase("Sairindhri")) {
+            } else {
                 resp.put("myAnswer", q.getSairindhriAnswer());
                 resp.put("partnerAnswered", sohamDone);
                 resp.put("partnerAnswer", q.isRevealed() ? q.getSohamAnswer() : null);
-            } else {
-                resp.put("sohamAnswer", q.isRevealed() ? q.getSohamAnswer() : null);
-                resp.put("sairindhriAnswer", q.isRevealed() ? q.getSairindhriAnswer() : null);
             }
+
+            resp.put("sohamAnswer", q.isRevealed() ? q.getSohamAnswer() : null);
+            resp.put("sairindhriAnswer", q.isRevealed() ? q.getSairindhriAnswer() : null);
 
             return ResponseEntity.ok(resp);
         } catch (Exception e) {
@@ -471,6 +497,12 @@ public class FunWalletController {
     public ResponseEntity<?> submitDailyAnswer(@RequestBody Map<String, String> payload) {
         try {
             String user = payload.get("user");
+            if (user == null || user.trim().isEmpty()) {
+                user = payload.get("userEmail");
+            }
+            if (user == null || user.trim().isEmpty()) {
+                user = payload.get("username");
+            }
             String answer = payload.get("answer");
             if (user == null || user.trim().isEmpty()) {
                 return ResponseEntity.badRequest().body("User is required");
@@ -485,10 +517,11 @@ public class FunWalletController {
                 newQ.setQuestionDate(todayStr);
                 int idx = Math.abs(LocalDate.now().getDayOfYear()) % CURATED_QUESTIONS.length;
                 newQ.setQuestionText(CURATED_QUESTIONS[idx]);
+                newQ.setRevealed(false);
                 return dailyQuestionRepository.save(newQ);
             });
 
-            if (user.equalsIgnoreCase("Soham") || user.toLowerCase().contains("admin")) {
+            if (isSoham(user)) {
                 q.setSohamAnswer(answer.trim());
                 q.setSohamAnsweredAt(Instant.now());
             } else {
@@ -515,8 +548,30 @@ public class FunWalletController {
     }
 
     @GetMapping("/daily-question/history")
-    public List<DailyQuestion> getQuestionHistory() {
-        return dailyQuestionRepository.findByRevealedTrueOrderByQuestionDateDesc();
+    public List<Map<String, Object>> getQuestionHistory(@RequestParam(required = false) String user,
+                                                        @RequestParam(required = false) String userEmail) {
+        String targetUser = (userEmail != null && !userEmail.trim().isEmpty()) ? userEmail.trim() : (user != null ? user.trim() : "");
+        boolean isSohamUser = isSoham(targetUser);
+        List<DailyQuestion> list = dailyQuestionRepository.findByRevealedTrueOrderByQuestionDateDesc();
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (DailyQuestion q : list) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", q.getId());
+            m.put("questionDate", q.getQuestionDate());
+            m.put("questionText", q.getQuestionText());
+            m.put("revealed", q.isRevealed());
+            m.put("sohamAnswer", q.getSohamAnswer());
+            m.put("sairindhriAnswer", q.getSairindhriAnswer());
+            if (isSohamUser) {
+                m.put("myAnswer", q.getSohamAnswer());
+                m.put("partnerAnswer", q.getSairindhriAnswer());
+            } else {
+                m.put("myAnswer", q.getSairindhriAnswer());
+                m.put("partnerAnswer", q.getSohamAnswer());
+            }
+            result.add(m);
+        }
+        return result;
     }
 
     // --- Feature 3: Instant Heartbeat Poke ---
