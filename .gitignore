@@ -31,3 +31,12 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Backups & Migration Scripts
+neon_backup.*
+neon_schema.*
+migrate_to_supabase.py
+import_to_db.py
+export_neon.py
+dump_ddl.py
+verify_supabase.py

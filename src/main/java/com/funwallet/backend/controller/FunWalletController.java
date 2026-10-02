@@ -25,6 +25,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.List;
@@ -452,11 +453,12 @@ public class FunWalletController {
                                              @RequestParam(required = false) String userEmail) {
         try {
             String targetUser = (userEmail != null && !userEmail.trim().isEmpty()) ? userEmail.trim() : (user != null ? user.trim() : "");
-            String todayStr = LocalDate.now().toString();
+            ZoneId istZone = ZoneId.of("Asia/Kolkata");
+            String todayStr = LocalDate.now(istZone).toString();
             DailyQuestion q = dailyQuestionRepository.findByQuestionDate(todayStr).orElseGet(() -> {
                 DailyQuestion newQ = new DailyQuestion();
                 newQ.setQuestionDate(todayStr);
-                int idx = Math.abs(LocalDate.now().getDayOfYear()) % CURATED_QUESTIONS.length;
+                int idx = Math.abs(LocalDate.now(istZone).getDayOfYear()) % CURATED_QUESTIONS.length;
                 newQ.setQuestionText(CURATED_QUESTIONS[idx]);
                 newQ.setRevealed(false);
                 return dailyQuestionRepository.save(newQ);
@@ -511,11 +513,12 @@ public class FunWalletController {
                 return ResponseEntity.badRequest().body("Answer cannot be blank");
             }
 
-            String todayStr = LocalDate.now().toString();
+            ZoneId istZone = ZoneId.of("Asia/Kolkata");
+            String todayStr = LocalDate.now(istZone).toString();
             DailyQuestion q = dailyQuestionRepository.findByQuestionDate(todayStr).orElseGet(() -> {
                 DailyQuestion newQ = new DailyQuestion();
                 newQ.setQuestionDate(todayStr);
-                int idx = Math.abs(LocalDate.now().getDayOfYear()) % CURATED_QUESTIONS.length;
+                int idx = Math.abs(LocalDate.now(istZone).getDayOfYear()) % CURATED_QUESTIONS.length;
                 newQ.setQuestionText(CURATED_QUESTIONS[idx]);
                 newQ.setRevealed(false);
                 return dailyQuestionRepository.save(newQ);
