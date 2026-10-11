@@ -790,93 +790,8 @@ public class FunWalletController {
     // FEATURE: Anniversary Countdown & Special Dates
     // =====================================================
 
-    private void seedDefaultSpecialDatesIfEmpty() {
-        if (specialDateRepository.count() == 0) {
-            SpecialDate d1 = new SpecialDate();
-            d1.setTitle("Official Anniversary");
-            d1.setEventDate(LocalDate.of(2023, 10, 24));
-            d1.setEmoji("💑");
-            d1.setCategory("ANNIVERSARY");
-            d1.setRecurring(true);
-            d1.setCreatedBy("SYSTEM");
-            specialDateRepository.save(d1);
-
-            SpecialDate d2 = new SpecialDate();
-            d2.setTitle("Our First Date");
-            d2.setEventDate(LocalDate.of(2023, 8, 15));
-            d2.setEmoji("☕");
-            d2.setCategory("FIRST_DATE");
-            d2.setRecurring(true);
-            d2.setCreatedBy("SYSTEM");
-            specialDateRepository.save(d2);
-
-            SpecialDate d3 = new SpecialDate();
-            d3.setTitle("Sairindhri's Birthday");
-            d3.setEventDate(LocalDate.of(2003, 3, 22));
-            d3.setEmoji("🎂");
-            d3.setCategory("BIRTHDAY");
-            d3.setRecurring(true);
-            d3.setCreatedBy("SYSTEM");
-            specialDateRepository.save(d3);
-
-            SpecialDate d4 = new SpecialDate();
-            d4.setTitle("Soham's Birthday");
-            d4.setEventDate(LocalDate.of(2002, 11, 14));
-            d4.setEmoji("🎈");
-            d4.setCategory("BIRTHDAY");
-            d4.setRecurring(true);
-            d4.setCreatedBy("SYSTEM");
-            specialDateRepository.save(d4);
-        }
-    }
-
-    private void seedDefaultRewardsIfEmpty() {
-        if (rewardRepository.count() == 0) {
-            Reward r1 = new Reward();
-            r1.setTitle("Late Night Ice Cream Run");
-            r1.setDescription("Partner gets you your favorite dessert/ice cream immediately!");
-            r1.setEmoji("🍦");
-            r1.setCost(30);
-            r1.setCreatedBy("SYSTEM");
-            rewardRepository.save(r1);
-
-            Reward r2 = new Reward();
-            r2.setTitle("30-Min Head Massage & Pampering");
-            r2.setDescription("Guaranteed relaxing massage anytime on demand.");
-            r2.setEmoji("💆");
-            r2.setCost(40);
-            r2.setCreatedBy("SYSTEM");
-            rewardRepository.save(r2);
-
-            Reward r3 = new Reward();
-            r3.setTitle("Win Any Disagreement Unconditionally");
-            r3.setDescription("Play this card to instantly win any playful argument with zero debates!");
-            r3.setEmoji("👑");
-            r3.setCost(60);
-            r3.setCreatedBy("SYSTEM");
-            rewardRepository.save(r3);
-
-            Reward r4 = new Reward();
-            r4.setTitle("Breakfast in Bed / Home Cooking");
-            r4.setDescription("Partner prepares your favorite meal with love and serves it.");
-            r4.setEmoji("🍳");
-            r4.setCost(50);
-            r4.setCreatedBy("SYSTEM");
-            rewardRepository.save(r4);
-
-            Reward r5 = new Reward();
-            r5.setTitle("Romantic Candlelight Dinner Date");
-            r5.setDescription("Full fancy date night planned and paid for by partner!");
-            r5.setEmoji("🕯️");
-            r5.setCost(100);
-            r5.setCreatedBy("SYSTEM");
-            rewardRepository.save(r5);
-        }
-    }
-
     @GetMapping("/special-dates")
     public List<SpecialDate> getAllSpecialDates() {
-        seedDefaultSpecialDatesIfEmpty();
         return specialDateRepository.findAllByOrderByEventDateAsc();
     }
 
@@ -906,6 +821,24 @@ public class FunWalletController {
         }
     }
 
+    @PutMapping("/special-dates/{id}")
+    public ResponseEntity<?> updateSpecialDate(@PathVariable Long id, @RequestBody Map<String, String> payload) {
+        try {
+            SpecialDate sd = specialDateRepository.findById(id).orElse(null);
+            if (sd == null) return ResponseEntity.notFound().build();
+            if (payload.containsKey("title")) sd.setTitle(payload.get("title").trim());
+            if (payload.containsKey("eventDate")) sd.setEventDate(LocalDate.parse(payload.get("eventDate").trim()));
+            if (payload.containsKey("emoji")) sd.setEmoji(payload.get("emoji"));
+            if (payload.containsKey("category")) sd.setCategory(payload.get("category"));
+            if (payload.containsKey("recurring")) sd.setRecurring(Boolean.parseBoolean(payload.get("recurring")));
+            SpecialDate saved = specialDateRepository.save(sd);
+            notifyEvent("SPECIAL_DATE_UPDATED");
+            return ResponseEntity.ok(saved);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Failed to update special date: " + e.getMessage());
+        }
+    }
+
     @DeleteMapping("/special-dates/{id}")
     public ResponseEntity<?> deleteSpecialDate(@PathVariable Long id) {
         try {
@@ -923,7 +856,6 @@ public class FunWalletController {
     @GetMapping("/special-dates/countdown")
     public ResponseEntity<?> getCountdowns() {
         try {
-            seedDefaultSpecialDatesIfEmpty();
             List<SpecialDate> dates = specialDateRepository.findAllByOrderByEventDateAsc();
             LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
             List<Map<String, Object>> countdowns = new ArrayList<>();
@@ -1018,7 +950,6 @@ public class FunWalletController {
 
     @GetMapping("/rewards")
     public List<Reward> getActiveRewards() {
-        seedDefaultRewardsIfEmpty();
         return rewardRepository.findByActiveTrueOrderByCostAsc();
     }
 
@@ -1053,15 +984,32 @@ public class FunWalletController {
         }
     }
 
-    @DeleteMapping("/rewards/{id}")
-    public ResponseEntity<?> deleteReward(@PathVariable Long id) {
+    @PutMapping("/rewards/{id}")
+    public ResponseEntity<?> updateReward(@PathVariable Long id, @RequestBody Map<String, String> payload) {
         try {
             Reward r = rewardRepository.findById(id).orElse(null);
             if (r == null) return ResponseEntity.notFound().build();
-            r.setActive(false); // Soft delete
-            rewardRepository.save(r);
-            notifyEvent("REWARD_DELETED");
-            return ResponseEntity.ok(Map.of("message", "Reward deactivated"));
+            if (payload.containsKey("title")) r.setTitle(payload.get("title").trim());
+            if (payload.containsKey("description")) r.setDescription(payload.get("description"));
+            if (payload.containsKey("emoji")) r.setEmoji(payload.get("emoji"));
+            if (payload.containsKey("cost")) r.setCost(Integer.parseInt(payload.get("cost")));
+            Reward saved = rewardRepository.save(r);
+            notifyEvent("REWARD_UPDATED");
+            return ResponseEntity.ok(saved);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Failed to update reward: " + e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/rewards/{id}")
+    public ResponseEntity<?> deleteReward(@PathVariable Long id) {
+        try {
+            if (rewardRepository.existsById(id)) {
+                rewardRepository.deleteById(id);
+                notifyEvent("REWARD_DELETED");
+                return ResponseEntity.ok(Map.of("message", "Reward deleted"));
+            }
+            return ResponseEntity.notFound().build();
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Delete error: " + e.getMessage());
         }
