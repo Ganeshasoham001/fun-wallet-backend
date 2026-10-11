@@ -40,3 +40,4 @@ import_to_db.py
 export_neon.py
 dump_ddl.py
 verify_supabase.py
+data/*.db

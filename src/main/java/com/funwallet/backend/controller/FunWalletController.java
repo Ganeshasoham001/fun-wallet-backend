@@ -8,10 +8,16 @@ import com.funwallet.backend.model.DailyQuestion;
 import com.funwallet.backend.model.HeartbeatPoke;
 import com.funwallet.backend.model.PolaroidMoment;
 import com.funwallet.backend.model.LoveEnvelope;
+import com.funwallet.backend.model.SpecialDate;
+import com.funwallet.backend.model.Reward;
+import com.funwallet.backend.model.RewardRedemption;
 import com.funwallet.backend.repository.DailyQuestionRepository;
 import com.funwallet.backend.repository.HeartbeatPokeRepository;
 import com.funwallet.backend.repository.PolaroidMomentRepository;
 import com.funwallet.backend.repository.LoveEnvelopeRepository;
+import com.funwallet.backend.repository.SpecialDateRepository;
+import com.funwallet.backend.repository.RewardRepository;
+import com.funwallet.backend.repository.RewardRedemptionRepository;
 import com.funwallet.backend.repository.UserRepository;
 import com.funwallet.backend.repository.ScheduledReminderRepository;
 import com.funwallet.backend.service.EmailService;
@@ -57,6 +63,15 @@ public class FunWalletController {
 
     @Autowired
     private LoveEnvelopeRepository loveEnvelopeRepository;
+
+    @Autowired
+    private SpecialDateRepository specialDateRepository;
+
+    @Autowired
+    private RewardRepository rewardRepository;
+
+    @Autowired
+    private RewardRedemptionRepository rewardRedemptionRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -132,8 +147,8 @@ public class FunWalletController {
     @PostMapping("/auth/forgot-password")
     public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> payload) {
         try {
-            String tempPass = funWalletService.forgotPassword(payload.get("email"));
-            return ResponseEntity.ok(Map.of("temporaryPassword", tempPass));
+            funWalletService.forgotPassword(payload.get("email"));
+            return ResponseEntity.ok(Map.of("message", "New password sent to your email!"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
@@ -768,6 +783,353 @@ public class FunWalletController {
             return ResponseEntity.ok(saved);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Open error: " + e.getMessage());
+        }
+    }
+
+    // =====================================================
+    // FEATURE: Anniversary Countdown & Special Dates
+    // =====================================================
+
+    private void seedDefaultSpecialDatesIfEmpty() {
+        if (specialDateRepository.count() == 0) {
+            SpecialDate d1 = new SpecialDate();
+            d1.setTitle("Official Anniversary");
+            d1.setEventDate(LocalDate.of(2023, 10, 24));
+            d1.setEmoji("💑");
+            d1.setCategory("ANNIVERSARY");
+            d1.setRecurring(true);
+            d1.setCreatedBy("SYSTEM");
+            specialDateRepository.save(d1);
+
+            SpecialDate d2 = new SpecialDate();
+            d2.setTitle("Our First Date");
+            d2.setEventDate(LocalDate.of(2023, 8, 15));
+            d2.setEmoji("☕");
+            d2.setCategory("FIRST_DATE");
+            d2.setRecurring(true);
+            d2.setCreatedBy("SYSTEM");
+            specialDateRepository.save(d2);
+
+            SpecialDate d3 = new SpecialDate();
+            d3.setTitle("Sairindhri's Birthday");
+            d3.setEventDate(LocalDate.of(2003, 3, 22));
+            d3.setEmoji("🎂");
+            d3.setCategory("BIRTHDAY");
+            d3.setRecurring(true);
+            d3.setCreatedBy("SYSTEM");
+            specialDateRepository.save(d3);
+
+            SpecialDate d4 = new SpecialDate();
+            d4.setTitle("Soham's Birthday");
+            d4.setEventDate(LocalDate.of(2002, 11, 14));
+            d4.setEmoji("🎈");
+            d4.setCategory("BIRTHDAY");
+            d4.setRecurring(true);
+            d4.setCreatedBy("SYSTEM");
+            specialDateRepository.save(d4);
+        }
+    }
+
+    private void seedDefaultRewardsIfEmpty() {
+        if (rewardRepository.count() == 0) {
+            Reward r1 = new Reward();
+            r1.setTitle("Late Night Ice Cream Run");
+            r1.setDescription("Partner gets you your favorite dessert/ice cream immediately!");
+            r1.setEmoji("🍦");
+            r1.setCost(30);
+            r1.setCreatedBy("SYSTEM");
+            rewardRepository.save(r1);
+
+            Reward r2 = new Reward();
+            r2.setTitle("30-Min Head Massage & Pampering");
+            r2.setDescription("Guaranteed relaxing massage anytime on demand.");
+            r2.setEmoji("💆");
+            r2.setCost(40);
+            r2.setCreatedBy("SYSTEM");
+            rewardRepository.save(r2);
+
+            Reward r3 = new Reward();
+            r3.setTitle("Win Any Disagreement Unconditionally");
+            r3.setDescription("Play this card to instantly win any playful argument with zero debates!");
+            r3.setEmoji("👑");
+            r3.setCost(60);
+            r3.setCreatedBy("SYSTEM");
+            rewardRepository.save(r3);
+
+            Reward r4 = new Reward();
+            r4.setTitle("Breakfast in Bed / Home Cooking");
+            r4.setDescription("Partner prepares your favorite meal with love and serves it.");
+            r4.setEmoji("🍳");
+            r4.setCost(50);
+            r4.setCreatedBy("SYSTEM");
+            rewardRepository.save(r4);
+
+            Reward r5 = new Reward();
+            r5.setTitle("Romantic Candlelight Dinner Date");
+            r5.setDescription("Full fancy date night planned and paid for by partner!");
+            r5.setEmoji("🕯️");
+            r5.setCost(100);
+            r5.setCreatedBy("SYSTEM");
+            rewardRepository.save(r5);
+        }
+    }
+
+    @GetMapping("/special-dates")
+    public List<SpecialDate> getAllSpecialDates() {
+        seedDefaultSpecialDatesIfEmpty();
+        return specialDateRepository.findAllByOrderByEventDateAsc();
+    }
+
+    @PostMapping("/special-dates")
+    public ResponseEntity<?> createSpecialDate(@RequestBody Map<String, String> payload) {
+        try {
+            String title = payload.get("title");
+            String dateStr = payload.get("eventDate");
+            if (title == null || title.trim().isEmpty() || dateStr == null || dateStr.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("Title and date are required");
+            }
+
+            SpecialDate sd = new SpecialDate();
+            sd.setTitle(title.trim());
+            sd.setEventDate(LocalDate.parse(dateStr.trim()));
+            sd.setEmoji(payload.getOrDefault("emoji", "💖"));
+            sd.setCategory(payload.getOrDefault("category", "CUSTOM"));
+            sd.setRecurring(Boolean.parseBoolean(payload.getOrDefault("recurring", "true")));
+            sd.setCreatedBy(payload.getOrDefault("createdBy", "Soham"));
+            sd.setCreatedAt(Instant.now());
+
+            SpecialDate saved = specialDateRepository.save(sd);
+            notifyEvent("SPECIAL_DATE_ADDED");
+            return ResponseEntity.ok(saved);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Failed to create special date: " + e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/special-dates/{id}")
+    public ResponseEntity<?> deleteSpecialDate(@PathVariable Long id) {
+        try {
+            if (specialDateRepository.existsById(id)) {
+                specialDateRepository.deleteById(id);
+                notifyEvent("SPECIAL_DATE_DELETED");
+                return ResponseEntity.ok(Map.of("message", "Special date deleted"));
+            }
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Delete error: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/special-dates/countdown")
+    public ResponseEntity<?> getCountdowns() {
+        try {
+            seedDefaultSpecialDatesIfEmpty();
+            List<SpecialDate> dates = specialDateRepository.findAllByOrderByEventDateAsc();
+            LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+            List<Map<String, Object>> countdowns = new ArrayList<>();
+
+            for (SpecialDate sd : dates) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("id", sd.getId());
+                item.put("title", sd.getTitle());
+                item.put("emoji", sd.getEmoji());
+                item.put("category", sd.getCategory());
+                item.put("eventDate", sd.getEventDate().toString());
+                item.put("recurring", sd.isRecurring());
+
+                // Calculate next occurrence
+                LocalDate nextOccurrence = sd.getEventDate();
+                if (sd.isRecurring() && nextOccurrence.isBefore(today)) {
+                    nextOccurrence = nextOccurrence.withYear(today.getYear());
+                    if (nextOccurrence.isBefore(today)) {
+                        nextOccurrence = nextOccurrence.plusYears(1);
+                    }
+                }
+                long daysUntil = java.time.temporal.ChronoUnit.DAYS.between(today, nextOccurrence);
+                item.put("nextOccurrence", nextOccurrence.toString());
+                item.put("daysUntil", daysUntil);
+                item.put("isToday", daysUntil == 0);
+
+                // Calculate years together (from original date)
+                long yearsTogether = java.time.temporal.ChronoUnit.YEARS.between(sd.getEventDate(), today);
+                item.put("yearsSince", yearsTogether);
+
+                countdowns.add(item);
+            }
+
+            // Sort by days until next occurrence
+            countdowns.sort((a, b) -> Long.compare((Long) a.get("daysUntil"), (Long) b.get("daysUntil")));
+
+            return ResponseEntity.ok(countdowns);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Countdown error: " + e.getMessage());
+        }
+    }
+
+    // =====================================================
+    // FEATURE: Relationship Stats Dashboard
+    // =====================================================
+
+    @GetMapping("/stats")
+    public ResponseEntity<?> getRelationshipStats() {
+        try {
+            Map<String, Object> stats = new HashMap<>();
+
+            // Total pokes exchanged
+            long totalPokes = heartbeatPokeRepository.count();
+            stats.put("totalPokes", totalPokes);
+
+            // Total questions answered
+            long totalQuestionsRevealed = dailyQuestionRepository.findByRevealedTrueOrderByQuestionDateDesc().size();
+            stats.put("totalQuestionsRevealed", totalQuestionsRevealed);
+
+            // Total moments saved
+            long totalMoments = polaroidMomentRepository.count();
+            stats.put("totalMoments", totalMoments);
+
+            // Total envelopes written
+            long totalEnvelopes = loveEnvelopeRepository.count();
+            stats.put("totalEnvelopes", totalEnvelopes);
+
+            // Total rewards redeemed
+            long totalRedemptions = rewardRedemptionRepository.count();
+            stats.put("totalRedemptions", totalRedemptions);
+
+            // Special dates / days together
+            List<SpecialDate> specialDates = specialDateRepository.findAllByOrderByEventDateAsc();
+            if (!specialDates.isEmpty()) {
+                LocalDate earliest = specialDates.get(0).getEventDate();
+                long daysTogether = java.time.temporal.ChronoUnit.DAYS.between(earliest, LocalDate.now());
+                stats.put("daysTogether", daysTogether);
+                stats.put("startDate", earliest.toString());
+            } else {
+                stats.put("daysTogether", 0);
+            }
+
+            return ResponseEntity.ok(stats);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Stats error: " + e.getMessage());
+        }
+    }
+
+    // =====================================================
+    // FEATURE: Rewards Catalog & Redemptions
+    // =====================================================
+
+    @GetMapping("/rewards")
+    public List<Reward> getActiveRewards() {
+        seedDefaultRewardsIfEmpty();
+        return rewardRepository.findByActiveTrueOrderByCostAsc();
+    }
+
+    @GetMapping("/rewards/all")
+    public List<Reward> getAllRewards() {
+        return rewardRepository.findAll();
+    }
+
+    @PostMapping("/rewards")
+    public ResponseEntity<?> createReward(@RequestBody Map<String, String> payload) {
+        try {
+            String title = payload.get("title");
+            String costStr = payload.get("cost");
+            if (title == null || title.trim().isEmpty() || costStr == null) {
+                return ResponseEntity.badRequest().body("Title and cost are required");
+            }
+
+            Reward r = new Reward();
+            r.setTitle(title.trim());
+            r.setDescription(payload.getOrDefault("description", ""));
+            r.setEmoji(payload.getOrDefault("emoji", "🎁"));
+            r.setCost(Integer.parseInt(costStr));
+            r.setCreatedBy(payload.getOrDefault("createdBy", "Soham"));
+            r.setActive(true);
+            r.setCreatedAt(Instant.now());
+
+            Reward saved = rewardRepository.save(r);
+            notifyEvent("REWARD_CREATED");
+            return ResponseEntity.ok(saved);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Failed to create reward: " + e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/rewards/{id}")
+    public ResponseEntity<?> deleteReward(@PathVariable Long id) {
+        try {
+            Reward r = rewardRepository.findById(id).orElse(null);
+            if (r == null) return ResponseEntity.notFound().build();
+            r.setActive(false); // Soft delete
+            rewardRepository.save(r);
+            notifyEvent("REWARD_DELETED");
+            return ResponseEntity.ok(Map.of("message", "Reward deactivated"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Delete error: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/rewards/{id}/redeem")
+    public ResponseEntity<?> redeemReward(@PathVariable Long id, @RequestBody Map<String, String> payload) {
+        try {
+            String userName = payload.get("userName");
+            if (userName == null || userName.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("userName is required");
+            }
+
+            Reward reward = rewardRepository.findById(id).orElse(null);
+            if (reward == null || !reward.isActive()) {
+                return ResponseEntity.badRequest().body("Reward not found or inactive");
+            }
+
+            AppUser user = funWalletService.getUser(userName.trim());
+            if (user.getPoints() < reward.getCost()) {
+                return ResponseEntity.badRequest().body("Not enough points! You need " + reward.getCost() + " but have " + user.getPoints());
+            }
+
+            // Deduct points
+            user.setPoints(user.getPoints() - reward.getCost());
+            userRepository.save(user);
+
+            // Determine partner
+            String partner = isSoham(userName) ? "Sairindhri" : "Soham";
+
+            // Create redemption record
+            RewardRedemption redemption = new RewardRedemption();
+            redemption.setRewardId(reward.getId());
+            redemption.setRedeemedBy(userName.trim());
+            redemption.setFulfilledBy(partner);
+            redemption.setPointsSpent(reward.getCost());
+            redemption.setRewardTitle(reward.getEmoji() + " " + reward.getTitle());
+            redemption.setStatus("PENDING");
+            redemption.setRedeemedAt(Instant.now());
+
+            RewardRedemption saved = rewardRedemptionRepository.save(redemption);
+            notifyEvent("REWARD_REDEEMED");
+            return ResponseEntity.ok(saved);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Redeem error: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/rewards/redemptions")
+    public List<RewardRedemption> getRedemptions(@RequestParam(required = false) String status) {
+        if (status != null && !status.trim().isEmpty()) {
+            return rewardRedemptionRepository.findByStatusOrderByRedeemedAtDesc(status.trim());
+        }
+        return rewardRedemptionRepository.findAllByOrderByRedeemedAtDesc();
+    }
+
+    @PostMapping("/rewards/redemptions/{id}/fulfill")
+    public ResponseEntity<?> fulfillRedemption(@PathVariable Long id) {
+        try {
+            RewardRedemption r = rewardRedemptionRepository.findById(id).orElse(null);
+            if (r == null) return ResponseEntity.notFound().build();
+            r.setStatus("FULFILLED");
+            r.setFulfilledAt(Instant.now());
+            rewardRedemptionRepository.save(r);
+            notifyEvent("REWARD_FULFILLED");
+            return ResponseEntity.ok(r);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Fulfill error: " + e.getMessage());
         }
     }
 }

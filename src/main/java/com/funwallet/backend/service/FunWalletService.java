@@ -7,6 +7,7 @@ import com.funwallet.backend.repository.PointsRequestRepository;
 import com.funwallet.backend.repository.StreakRepository;
 import com.funwallet.backend.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -35,6 +36,9 @@ public class FunWalletService {
     @Autowired
     private EmailService emailService;
 
+    @Autowired
+    private BCryptPasswordEncoder passwordEncoder;
+
     private void logHistory(String username, int change, String reason) {
         com.funwallet.backend.model.PointHistory history = new com.funwallet.backend.model.PointHistory();
         history.setUsername(username);
@@ -56,7 +60,7 @@ public class FunWalletService {
     public boolean changePassword(String email, String oldPassword, String newPassword) {
         AppUser user = login(email, oldPassword);
         if (user != null) {
-            user.setPassword(newPassword);
+            user.setPassword(passwordEncoder.encode(newPassword));
             userRepository.save(user);
             return true;
         }
@@ -102,8 +106,21 @@ public class FunWalletService {
         if (password != null) password = password.trim();
         AppUser user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        if (!user.getPassword().equals(password)) {
-            throw new RuntimeException("Invalid password");
+        
+        String stored = user.getPassword();
+        // BCrypt hashes always start with "$2" — if stored password doesn't,
+        // it's a legacy plain-text password; verify directly then migrate to BCrypt
+        if (stored != null && !stored.startsWith("$2")) {
+            if (!stored.equals(password)) {
+                throw new RuntimeException("Invalid password");
+            }
+            // Migrate legacy plain-text password to BCrypt on successful login
+            user.setPassword(passwordEncoder.encode(password));
+            userRepository.save(user);
+        } else {
+            if (!passwordEncoder.matches(password, stored)) {
+                throw new RuntimeException("Invalid password");
+            }
         }
         return user;
     }
@@ -117,7 +134,7 @@ public class FunWalletService {
         AppUser user = userRepository.findByName(name).orElseGet(AppUser::new);
         user.setName(name);
         user.setEmail(email);
-        user.setPassword(password);
+        user.setPassword(passwordEncoder.encode(password));
         user.setRole("Soham".equalsIgnoreCase(name) ? "ADMIN" : "USER");
         return userRepository.save(user);
     }
@@ -128,7 +145,7 @@ public class FunWalletService {
         
         // Generate random password
         String newPassword = "fun" + (int)(1000 + Math.random() * 9000);
-        user.setPassword(newPassword);
+        user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
 
         // Send Email via Gmail SMTP
@@ -143,7 +160,8 @@ public class FunWalletService {
             System.err.println("Failed to send reset email: " + e.getMessage());
         }
         
-        return newPassword;
+        // Return confirmation only — NOT the temp password
+        return "SENT";
     }
 
     public AppUser deductPoints(String adminName, String userName) {
